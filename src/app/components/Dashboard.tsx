@@ -453,7 +453,7 @@ export default function Dashboard() {
                     <input className="f-input" placeholder="4.8" value={form.rating} onChange={e => setForm(f => ({ ...f, rating: e.target.value }))} />
                   </div>
                   <div className="f-row">
-                    <label className="f-label">Tag</label>
+                    <label className="f-label">Tags</label>
                     <select className="f-input f-select" value={form.tag} onChange={e => setForm(f => ({ ...f, tag: e.target.value }))}>
                       {tags.map(t => <option key={t}>{t}</option>)}
                     </select>
