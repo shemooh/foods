@@ -37,7 +37,19 @@ export default function Navbar() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  const reset = () => { setEmail(""); setPassword(""); setName(""); setError(""); setDone(false); };
+  const reset = () => {
+    setEmail("");
+    setPassword("");
+    setName("");
+    setError("");
+    setDone(false);
+  };
+
+  const openLogin = () => {
+    setTab("login");
+    setShowLogin(true);
+    reset();
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -47,28 +59,59 @@ export default function Navbar() {
 
   const handleSubmit = async () => {
     setError("");
-    if (!email || !password) { setError("Please fill in all fields."); return; }
-    if (!isValidEmail(email)) { setError("Please enter a valid email address."); return; }
-    if (tab === "signup" && !name.trim()) { setError("Please enter your full name."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+
+    if (!email || !password) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (tab === "signup" && !name.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
     setLoading(true);
 
-    if (tab === "signup") {
-      const { error } = await supabase.auth.signUp({
-        email: email.trim(), password,
-        options: { data: { full_name: name.trim() } },
-      });
-      if (error) { setError(error.message); setLoading(false); return; }
-      setDone(true); setLoading(false);
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (error) { setError(error.message); setLoading(false); return; }
-      setDone(true); setLoading(false);
-      setTimeout(() => { setShowLogin(false); reset(); router.push("/"); }, 800);
+    try {
+      if (tab === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { full_name: name.trim() } },
+        });
+        if (error) throw error;
+        setDone(true);
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (error) throw error;
+        setDone(true);
+        setTimeout(() => {
+          setShowLogin(false);
+          reset();
+          router.push("/");
+        }, 800);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const displayName = user?.user_metadata?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "Account";
+  const displayName =
+    user?.user_metadata?.full_name?.split(" ")[0] ||
+    user?.email?.split("@")[0] ||
+    "Account";
 
   return (
     <>
@@ -148,23 +191,24 @@ export default function Navbar() {
           </div>
 
           <div className="nb-actions">
-            <button className="nb-cart-btn" onClick={() => setCartOpen(true)}>
+            <button className="nb-cart-btn" onClick={() => setCartOpen(true)} aria-label="Open cart">
               🛒
               {cartCount > 0 && (
                 <span key={cartCount} className="nb-badge nb-badge-bump">{cartCount}</span>
               )}
             </button>
+
             {user ? (
               <div className="nb-user">
                 <span className="nb-username">👤 {displayName}</span>
                 <button className="nb-logout" onClick={handleLogout}>Log out</button>
               </div>
             ) : (
-              <button className="nb-cta" onClick={() => { setShowLogin(true); reset(); }}>Order Now</button>
+              <button className="nb-cta" onClick={openLogin}>Order Now</button>
             )}
           </div>
 
-          <button className="nb-toggle" onClick={() => setMobileOpen(!mobileOpen)}>
+          <button className="nb-toggle" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle menu">
             {mobileOpen ? "✕" : "☰"}
           </button>
         </div>
@@ -177,61 +221,132 @@ export default function Navbar() {
             {user && <Link href="/dashboard" className="nb-mobile-link" onClick={() => setMobileOpen(false)}>⚡ Dashboard</Link>}
             <button
               className="nb-mobile-link nb-mobile-cart"
-              onClick={() => { setCartOpen(true); setMobileOpen(false); }}
+              onClick={() => {
+                setCartOpen(true);
+                setMobileOpen(false);
+              }}
             >
               <span>🛒 Cart</span>
               {cartCount > 0 && <span className="nb-mobile-cart-badge">{cartCount}</span>}
             </button>
-            {user
-              ? <button className="nb-mobile-link" onClick={handleLogout}>Log out ({displayName})</button>
-              : <button className="nb-mobile-link" onClick={() => { setShowLogin(true); setMobileOpen(false); reset(); }}>Order Now</button>
-            }
+            {user ? (
+              <button className="nb-mobile-link" onClick={handleLogout}>Log out ({displayName})</button>
+            ) : (
+              <button
+                className="nb-mobile-link"
+                onClick={() => {
+                  openLogin();
+                  setMobileOpen(false);
+                }}
+              >
+                Order Now
+              </button>
+            )}
           </div>
         )}
       </nav>
 
-      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
+      <CartDrawer
+        open={cartOpen}
+        onClose={() => setCartOpen(false)}
+        onRequireLogin={openLogin}
+      />
 
       {showLogin && (
         <div className="overlay" onClick={() => setShowLogin(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <button className="modal-x" onClick={() => setShowLogin(false)}>✕</button>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-x" onClick={() => setShowLogin(false)} aria-label="Close login modal">✕</button>
             <span className="modal-logo">
               <Image src="/logo.png" alt="TCCBite" width={90} height={26} style={{ objectFit: "contain" }} />
             </span>
             <div className="modal-title">Welcome.</div>
-            <div className="modal-sub">{tab === "login" ? "Sign in to place your order." : "Create an account to get started."}</div>
-            <div className="m-tabs">
-              <button className={`m-tab${tab === "login" ? " active" : ""}`} onClick={() => { setTab("login"); setError(""); setDone(false); }}>Login</button>
-              <button className={`m-tab${tab === "signup" ? " active" : ""}`} onClick={() => { setTab("signup"); setError(""); setDone(false); }}>Sign Up</button>
+            <div className="modal-sub">
+              {tab === "login" ? "Sign in to place your order." : "Create an account to get started."}
             </div>
+
+            <div className="m-tabs">
+              <button
+                className={`m-tab${tab === "login" ? " active" : ""}`}
+                onClick={() => {
+                  setTab("login");
+                  setError("");
+                  setDone(false);
+                }}
+              >
+                Login
+              </button>
+              <button
+                className={`m-tab${tab === "signup" ? " active" : ""}`}
+                onClick={() => {
+                  setTab("signup");
+                  setError("");
+                  setDone(false);
+                }}
+              >
+                Sign Up
+              </button>
+            </div>
+
             {error && <div className="m-error">⚠ {error}</div>}
             {done && tab === "signup" && <div className="m-success">✓ Check your email to confirm your account.</div>}
             {done && tab === "login" && <div className="m-success">✓ Signed in! Redirecting…</div>}
+
             {tab === "signup" && (
               <div className="m-field">
                 <label className="m-label">Full Name</label>
-                <input className={`m-input${tab === "signup" && name === "" && error ? " invalid" : ""}`} placeholder="Juan dela Cruz" value={name} onChange={e => setName(e.target.value)} />
+                <input
+                  className={`m-input${tab === "signup" && name === "" && error ? " invalid" : ""}`}
+                  placeholder="Juan dela Cruz"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
               </div>
             )}
+
             <div className="m-field">
               <label className="m-label">Email</label>
-              <input className={`m-input${email && !isValidEmail(email) ? " invalid" : ""}`} type="email" placeholder="you@email.com" value={email} onChange={e => setEmail(e.target.value)} />
+              <input
+                className={`m-input${email && !isValidEmail(email) ? " invalid" : ""}`}
+                type="email"
+                placeholder="you@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
               {email && !isValidEmail(email) && <div className="m-hint">Enter a valid email (e.g. name@domain.com)</div>}
             </div>
+
             <div className="m-field">
               <label className="m-label">Password</label>
-              <input className={`m-input${password && password.length < 6 ? " invalid" : ""}`} type="password" placeholder="Min. 6 characters" value={password} onChange={e => setPassword(e.target.value)} />
+              <input
+                className={`m-input${password && password.length < 6 ? " invalid" : ""}`}
+                type="password"
+                placeholder="Min. 6 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
               {password && password.length < 6 && <div className="m-hint">Password must be at least 6 characters</div>}
             </div>
+
             <button className="m-submit" onClick={handleSubmit} disabled={loading || (done && tab === "signup")}>
               {loading ? <span className="spinner" /> : tab === "login" ? "Sign In" : "Create Account"}
             </button>
+
             <div className="m-footer">
-              {tab === "login"
-                ? <>No account? <a onClick={() => { setTab("signup"); setError(""); setDone(false); }}>Sign up</a></>
-                : <>Already have an account? <a onClick={() => { setTab("login"); setError(""); setDone(false); }}>Sign in</a></>
-              }
+              {tab === "login" ? (
+                <>
+                  No account?{" "}
+                  <a onClick={() => { setTab("signup"); setError(""); setDone(false); }}>
+                    Sign up
+                  </a>
+                </>
+              ) : (
+                <>
+                  Already have an account?{" "}
+                  <a onClick={() => { setTab("login"); setError(""); setDone(false); }}>
+                    Sign in
+                  </a>
+                </>
+              )}
             </div>
           </div>
         </div>
