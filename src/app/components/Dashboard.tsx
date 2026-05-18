@@ -66,6 +66,7 @@ export default function Dashboard() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [filter, setFilter] = useState<"all" | Order["status"]>("all");
   const [updating, setUpdating] = useState<string | null>(null);
+  const [clearMsg, setClearMsg] = useState("");
 
   useEffect(() => {
     if (!adminLoading && !isAdmin) router.push("/");
@@ -155,10 +156,39 @@ export default function Dashboard() {
 
   const handleCancel = () => { setForm(emptyForm); setEditId(null); setMsg(""); setPreview(""); };
 
-  // Order handlers
+  // Order handlers — auto-delete all when every order is delivered
   const updateStatus = async (id: string, status: Order["status"]) => {
     setUpdating(id);
     await supabase.from("orders").update({ status }).eq("id", id);
+
+    // Re-fetch fresh list after update
+    const { data: fresh } = await supabase.from("orders").select("*");
+    const freshOrders: Order[] = fresh || [];
+
+    // If every order is now delivered, delete them all
+    if (freshOrders.length > 0 && freshOrders.every(o => o.status === "delivered")) {
+      const ids = freshOrders.map(o => o.id);
+      await supabase.from("orders").delete().in("id", ids);
+      setOrders([]);
+      setClearMsg("✓ All orders delivered! Order list has been cleared.");
+      setTimeout(() => setClearMsg(""), 4000);
+    } else {
+      setOrders(freshOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+    }
+
+    setUpdating(null);
+  };
+
+  const deleteOrder = async (id: string) => {
+    setUpdating(id);
+    const { error } = await supabase.from("orders").delete().eq("id", id);
+    if (!error) {
+      setOrders(prev => prev.filter(o => o.id !== id));
+    } else {
+      console.error("Delete failed:", error.message);
+      setClearMsg("⚠ Delete failed: " + error.message);
+      setTimeout(() => setClearMsg(""), 4000);
+    }
     setUpdating(null);
   };
 
@@ -179,7 +209,7 @@ export default function Dashboard() {
   };
 
   if (adminLoading) return (
-    <div style={{ paddingTop: 64, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: "0.82rem", color: "rgba(0,0,0,0.3)" }}>
+    <div style={{ paddingTop: 64, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: "1rem", color: "rgba(0,0,0,0.4)" }}>
       Checking access…
     </div>
   );
@@ -193,56 +223,63 @@ export default function Dashboard() {
         * { box-sizing: border-box; }
         .db-root { padding-top: 72px; min-height: 100vh; background: #fafafa; font-family: 'Inter', -apple-system, sans-serif; }
         .db-header { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.5rem 0; }
-        .db-title { font-size: 1.5rem; font-weight: 900; color: #000; letter-spacing: -0.04em; text-transform: uppercase; margin-bottom: 0.2rem; }
-        .db-sub { font-size: 0.75rem; font-weight: 300; color: rgba(0,0,0,0.35); margin-bottom: 1.5rem; }
+        .db-title { font-size: 1.65rem; font-weight: 900; color: #000; letter-spacing: -0.04em; text-transform: uppercase; margin-bottom: 0.3rem; }
+        .db-sub { font-size: 0.88rem; font-weight: 400; color: rgba(0,0,0,0.45); margin-bottom: 1.5rem; }
 
         .db-tabs { display: flex; gap: 0; border-bottom: 1px solid rgba(0,0,0,0.08); max-width: 1080px; margin: 0 auto; padding: 0 1.5rem; }
-        .db-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 0.75rem 1.25rem; font-family: 'Inter', sans-serif; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(0,0,0,0.35); cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
+        .db-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 0.85rem 1.4rem; font-family: 'Inter', sans-serif; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(0,0,0,0.4); cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
         .db-tab:hover { color: #000; }
         .db-tab.active { color: #000; border-bottom-color: #f97316; }
-        .db-tab-badge { background: #f97316; color: #fff; border-radius: 2px; padding: 0.1rem 0.35rem; font-size: 0.55rem; font-weight: 700; margin-left: 0.4rem; }
+        .db-tab-badge { background: #f97316; color: #fff; border-radius: 2px; padding: 0.12rem 0.4rem; font-size: 0.65rem; font-weight: 700; margin-left: 0.4rem; }
 
         .db-body { max-width: 1080px; margin: 0 auto; padding: 2rem 1.5rem; }
 
         /* ── ORDERS TAB ── */
-        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem; margin-bottom: 1.75rem; }
-        .stat-card { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 1rem; }
-        .stat-val { font-size: 1.75rem; font-weight: 900; color: #000; letter-spacing: -0.04em; line-height: 1; margin-bottom: 0.25rem; }
-        .stat-label { font-size: 0.58rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; }
-        .live-pill { display: inline-flex; align-items: center; gap: 0.4rem; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 2px; padding: 0.3rem 0.7rem; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(0,0,0,0.4); margin-bottom: 1.5rem; }
-        .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #16a34a; animation: pulse 1.5s infinite; }
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.75rem; }
+        .stat-card { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 1.1rem; }
+        .stat-val { font-size: 2rem; font-weight: 900; color: #000; letter-spacing: -0.04em; line-height: 1; margin-bottom: 0.3rem; }
+        .stat-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+        .live-pill { display: inline-flex; align-items: center; gap: 0.45rem; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 2px; padding: 0.35rem 0.8rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(0,0,0,0.45); margin-bottom: 1.5rem; }
+        .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #16a34a; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .filter-row { display: flex; gap: 0.4rem; margin-bottom: 1.25rem; overflow-x: auto; scrollbar-width: none; }
+
+        .clear-banner { background: rgba(22,163,74,0.08); border: 1px solid rgba(22,163,74,0.25); border-radius: 6px; padding: 0.85rem 1.1rem; font-size: 0.85rem; font-weight: 600; color: #15803d; margin-bottom: 1.25rem; }
+
+        .filter-row { display: flex; gap: 0.45rem; margin-bottom: 1.35rem; overflow-x: auto; scrollbar-width: none; }
         .filter-row::-webkit-scrollbar { display: none; }
-        .filter-btn { flex-shrink: 0; background: #fff; border: 1px solid rgba(0,0,0,0.09); border-radius: 2px; padding: 0.4rem 0.85rem; font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(0,0,0,0.4); cursor: pointer; transition: all 0.15s; }
-        .filter-btn:hover { border-color: rgba(0,0,0,0.25); color: #000; }
+        .filter-btn { flex-shrink: 0; background: #fff; border: 1px solid rgba(0,0,0,0.1); border-radius: 2px; padding: 0.45rem 0.95rem; font-family: 'Inter', sans-serif; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(0,0,0,0.45); cursor: pointer; transition: all 0.15s; }
+        .filter-btn:hover { border-color: rgba(0,0,0,0.3); color: #000; }
         .filter-btn.active { background: #000; color: #fff; border-color: #000; }
-        .order-row { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 1.1rem 1.25rem; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 1rem; transition: box-shadow 0.15s; }
+
+        .order-row { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 1.2rem 1.4rem; margin-bottom: 0.65rem; display: flex; align-items: center; gap: 1.1rem; transition: box-shadow 0.15s; }
         .order-row:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-        .or-emoji { font-size: 1.75rem; filter: grayscale(1); flex-shrink: 0; line-height: 1; }
+        .or-emoji { font-size: 2rem; filter: grayscale(1); flex-shrink: 0; line-height: 1; }
         .or-info { flex: 1; min-width: 0; }
-        .or-num { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(0,0,0,0.28); margin-bottom: 0.15rem; }
-        .or-name { font-size: 0.88rem; font-weight: 700; color: #000; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .or-rest { font-size: 0.6rem; color: rgba(0,0,0,0.28); text-transform: uppercase; letter-spacing: 0.06em; }
-        .or-email { font-size: 0.6rem; color: rgba(0,0,0,0.3); margin-top: 0.15rem; }
-        .or-note { font-size: 0.62rem; color: rgba(0,0,0,0.35); font-style: italic; margin-top: 0.3rem; }
-        .or-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; flex-shrink: 0; }
-        .or-price { font-size: 0.82rem; font-weight: 700; color: #000; letter-spacing: -0.02em; }
-        .or-time { font-size: 0.6rem; color: rgba(0,0,0,0.25); }
-        .status-select { border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; padding: 0.35rem 0.6rem; font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; outline: none; transition: border-color 0.15s; background: #fff; flex-shrink: 0; }
+        .or-num { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(0,0,0,0.35); margin-bottom: 0.2rem; }
+        .or-name { font-size: 1rem; font-weight: 700; color: #000; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .or-rest { font-size: 0.72rem; color: rgba(0,0,0,0.4); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
+        .or-email { font-size: 0.72rem; color: rgba(0,0,0,0.4); margin-top: 0.2rem; }
+        .or-note { font-size: 0.75rem; color: rgba(0,0,0,0.45); font-style: italic; margin-top: 0.35rem; }
+        .or-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; flex-shrink: 0; }
+        .or-price { font-size: 0.95rem; font-weight: 700; color: #000; letter-spacing: -0.02em; }
+        .or-time { font-size: 0.72rem; color: rgba(0,0,0,0.35); }
+        .status-select { border: 1.5px solid rgba(0,0,0,0.12); border-radius: 5px; padding: 0.45rem 0.75rem; font-family: 'Inter', sans-serif; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; outline: none; transition: border-color 0.15s; background: #fff; flex-shrink: 0; }
         .status-select:focus { border-color: #000; }
         .status-select:disabled { opacity: 0.4; cursor: default; }
-        .dash-empty { text-align: center; padding: 3rem 0; font-size: 0.82rem; color: rgba(0,0,0,0.3); }
+        .or-delete-btn { flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; background: rgba(204,0,0,0.07); border: 1px solid rgba(204,0,0,0.22); color: #cc0000; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+        .or-delete-btn:hover { background: #cc0000; color: #fff; border-color: #cc0000; }
+        .or-delete-btn:disabled { opacity: 0.4; cursor: default; }
+        .dash-empty { text-align: center; padding: 3rem 0; font-size: 0.95rem; color: rgba(0,0,0,0.35); }
 
         /* ── MENU TAB ── */
         .menu-body { display: grid; grid-template-columns: 380px 1fr; gap: 2rem; align-items: start; }
-        .db-form { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 1.5rem; position: sticky; top: 80px; }
-        .db-form-title { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(0,0,0,0.3); margin-bottom: 1.25rem; }
-        .f-row { margin-bottom: 0.65rem; }
-        .f-label { font-size: 0.58rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(0,0,0,0.28); margin-bottom: 0.35rem; display: block; }
-        .f-input { width: 100%; border: 1px solid rgba(0,0,0,0.09); border-radius: 4px; padding: 0.6rem 0.8rem; font-family: 'Inter', sans-serif; font-size: 0.8rem; color: #000; background: #fafafa; outline: none; transition: border-color 0.15s; }
+        .db-form { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 1.5rem; position: sticky; top: 80px; }
+        .db-form-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: rgba(0,0,0,0.35); margin-bottom: 1.25rem; }
+        .f-row { margin-bottom: 0.75rem; }
+        .f-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(0,0,0,0.4); margin-bottom: 0.35rem; display: block; }
+        .f-input { width: 100%; border: 1px solid rgba(0,0,0,0.1); border-radius: 5px; padding: 0.65rem 0.85rem; font-family: 'Inter', sans-serif; font-size: 0.88rem; color: #000; background: #fafafa; outline: none; transition: border-color 0.15s; }
         .f-input:focus { border-color: #f97316; background: #fff; }
-        .f-input::placeholder { color: rgba(0,0,0,0.18); }
+        .f-input::placeholder { color: rgba(0,0,0,0.22); }
         .f-textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
         .f-select { appearance: none; cursor: pointer; }
         .img-upload-area { border: 1.5px dashed rgba(0,0,0,0.12); border-radius: 6px; padding: 1rem; text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s; background: #fafafa; position: relative; }
@@ -251,45 +288,45 @@ export default function Dashboard() {
         .img-preview { position: relative; width: 100%; height: 140px; border-radius: 4px; overflow: hidden; margin-bottom: 0.5rem; }
         .img-placeholder { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; padding: 1rem 0; }
         .img-placeholder-icon { font-size: 1.75rem; opacity: 0.3; }
-        .img-placeholder-text { font-size: 0.68rem; color: rgba(0,0,0,0.3); }
-        .img-placeholder-sub { font-size: 0.6rem; color: rgba(0,0,0,0.2); }
+        .img-placeholder-text { font-size: 0.78rem; color: rgba(0,0,0,0.35); }
+        .img-placeholder-sub { font-size: 0.7rem; color: rgba(0,0,0,0.25); }
         .img-remove { position: absolute; top: 0.4rem; right: 0.4rem; background: rgba(0,0,0,0.55); color: #fff; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 0.65rem; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 2; transition: background 0.15s; }
         .img-remove:hover { background: #cc0000; }
-        .img-uploading { font-size: 0.68rem; color: #f97316; text-align: center; padding: 0.35rem 0; }
+        .img-uploading { font-size: 0.78rem; color: #f97316; text-align: center; padding: 0.35rem 0; }
         .img-or { display: flex; align-items: center; gap: 0.5rem; margin: 0.65rem 0; }
         .img-or::before, .img-or::after { content: ''; flex: 1; height: 1px; background: rgba(0,0,0,0.07); }
-        .img-or span { font-size: 0.58rem; color: rgba(0,0,0,0.2); letter-spacing: 0.06em; text-transform: uppercase; }
+        .img-or span { font-size: 0.68rem; color: rgba(0,0,0,0.25); letter-spacing: 0.06em; text-transform: uppercase; }
         .emoji-grid { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem; }
-        .emoji-btn { width: 32px; height: 32px; background: #fafafa; border: 1px solid rgba(0,0,0,0.08); border-radius: 4px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
+        .emoji-btn { width: 34px; height: 34px; background: #fafafa; border: 1px solid rgba(0,0,0,0.08); border-radius: 4px; cursor: pointer; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
         .emoji-btn:hover { background: #f0f0f0; }
         .emoji-btn.selected { border-color: #f97316; background: rgba(249,115,22,0.08); }
         .f-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-        .f-msg { font-size: 0.68rem; padding: 0.5rem 0.75rem; border-radius: 4px; margin-bottom: 0.65rem; }
-        .f-msg.error { color: #cc0000; background: rgba(204,0,0,0.05); border: 1px solid rgba(204,0,0,0.1); }
-        .f-msg.success { color: #1a7a1a; background: rgba(26,122,26,0.05); border: 1px solid rgba(26,122,26,0.1); }
+        .f-msg { font-size: 0.8rem; padding: 0.55rem 0.8rem; border-radius: 4px; margin-bottom: 0.65rem; font-weight: 500; }
+        .f-msg.error { color: #cc0000; background: rgba(204,0,0,0.05); border: 1px solid rgba(204,0,0,0.12); }
+        .f-msg.success { color: #1a7a1a; background: rgba(26,122,26,0.05); border: 1px solid rgba(26,122,26,0.12); }
         .f-btns { display: flex; gap: 0.5rem; margin-top: 1rem; }
-        .f-save { flex: 1; background: #f97316; color: #fff; border: none; border-radius: 4px; padding: 0.7rem; font-family: 'Inter', sans-serif; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: opacity 0.15s; }
+        .f-save { flex: 1; background: #f97316; color: #fff; border: none; border-radius: 5px; padding: 0.75rem; font-family: 'Inter', sans-serif; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; cursor: pointer; transition: opacity 0.15s; }
         .f-save:hover { opacity: 0.85; }
         .f-save:disabled { opacity: 0.4; cursor: default; }
-        .f-cancel { background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; padding: 0.7rem 1rem; font-family: 'Inter', sans-serif; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(0,0,0,0.4); cursor: pointer; transition: all 0.15s; }
+        .f-cancel { background: none; border: 1px solid rgba(0,0,0,0.12); border-radius: 5px; padding: 0.75rem 1rem; font-family: 'Inter', sans-serif; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(0,0,0,0.45); cursor: pointer; transition: all 0.15s; }
         .f-cancel:hover { border-color: #000; color: #000; }
-        .db-list { display: flex; flex-direction: column; gap: 0.5rem; }
-        .db-empty { font-size: 0.78rem; color: rgba(0,0,0,0.3); padding: 2rem; text-align: center; background: #fff; border: 1px solid rgba(0,0,0,0.07); border-radius: 6px; }
-        .item-card { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem; transition: box-shadow 0.15s; }
+        .db-list { display: flex; flex-direction: column; gap: 0.55rem; }
+        .db-empty { font-size: 0.88rem; color: rgba(0,0,0,0.35); padding: 2rem; text-align: center; background: #fff; border: 1px solid rgba(0,0,0,0.07); border-radius: 8px; }
+        .item-card { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 1rem 1.25rem; display: flex; align-items: center; gap: 1rem; transition: box-shadow 0.15s; }
         .item-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
-        .item-thumb { width: 52px; height: 52px; border-radius: 6px; overflow: hidden; flex-shrink: 0; background: #f5f5f5; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; position: relative; }
+        .item-thumb { width: 54px; height: 54px; border-radius: 7px; overflow: hidden; flex-shrink: 0; background: #f5f5f5; display: flex; align-items: center; justify-content: center; font-size: 1.85rem; position: relative; }
         .item-info { flex: 1; min-width: 0; }
-        .item-name { font-size: 0.88rem; font-weight: 700; color: #000; letter-spacing: -0.02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .item-rest { font-size: 0.65rem; color: rgba(0,0,0,0.3); margin-top: 0.1rem; }
-        .item-meta { display: flex; gap: 0.75rem; margin-top: 0.4rem; flex-wrap: wrap; }
-        .item-pill { font-size: 0.58rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(0,0,0,0.35); background: #f5f5f5; padding: 0.2rem 0.5rem; border-radius: 2px; }
-        .item-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
-        .btn-edit { background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; padding: 0.4rem 0.75rem; font-family: 'Inter', sans-serif; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(0,0,0,0.45); cursor: pointer; transition: all 0.15s; }
+        .item-name { font-size: 0.95rem; font-weight: 700; color: #000; letter-spacing: -0.02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .item-rest { font-size: 0.75rem; color: rgba(0,0,0,0.4); margin-top: 0.15rem; }
+        .item-meta { display: flex; gap: 0.6rem; margin-top: 0.4rem; flex-wrap: wrap; }
+        .item-pill { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(0,0,0,0.45); background: #f3f3f3; padding: 0.22rem 0.55rem; border-radius: 3px; }
+        .item-actions { display: flex; gap: 0.45rem; flex-shrink: 0; }
+        .btn-edit { background: none; border: 1px solid rgba(0,0,0,0.12); border-radius: 4px; padding: 0.45rem 0.85rem; font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(0,0,0,0.5); cursor: pointer; transition: all 0.15s; }
         .btn-edit:hover { border-color: #000; color: #000; }
-        .btn-del { background: none; border: 1px solid rgba(204,0,0,0.15); border-radius: 4px; padding: 0.4rem 0.75rem; font-family: 'Inter', sans-serif; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(204,0,0,0.5); cursor: pointer; transition: all 0.15s; }
+        .btn-del { background: none; border: 1px solid rgba(204,0,0,0.18); border-radius: 4px; padding: 0.45rem 0.85rem; font-family: 'Inter', sans-serif; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(204,0,0,0.55); cursor: pointer; transition: all 0.15s; }
         .btn-del:hover { border-color: #cc0000; color: #cc0000; }
         .btn-del:disabled { opacity: 0.4; cursor: default; }
-        .db-count { font-size: 0.65rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(0,0,0,0.25); margin-bottom: 0.75rem; }
+        .db-count { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: rgba(0,0,0,0.3); margin-bottom: 0.85rem; }
 
         @media (max-width: 780px) {
           .menu-body { grid-template-columns: 1fr; }
@@ -345,6 +382,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {clearMsg && <div className="clear-banner">{clearMsg}</div>}
+
               <div className="filter-row">
                 {(["all", ...STATUSES] as const).map(s => (
                   <button key={s} className={`filter-btn${filter === s ? " active" : ""}`} onClick={() => setFilter(s)}>
@@ -354,7 +393,11 @@ export default function Dashboard() {
               </div>
 
               {loadingOrders && <div className="dash-empty">Loading orders…</div>}
-              {!loadingOrders && filtered.length === 0 && <div className="dash-empty">No orders found.</div>}
+              {!loadingOrders && filtered.length === 0 && (
+                <div className="dash-empty">
+                  {orders.length === 0 ? "No orders yet. All clear! 🎉" : "No orders matching this filter."}
+                </div>
+              )}
 
               {filtered.map(order => {
                 const s = STATUS_CONFIG[order.status];
@@ -362,7 +405,7 @@ export default function Dashboard() {
                   <div key={order.id} className="order-row">
                     <span className="or-emoji">{order.food_emoji || "🍴"}</span>
                     <div className="or-info">
-                      <div className="or-num">#{order.order_number}</div>
+                      <div className="or-num">Order #{order.order_number}</div>
                       <div className="or-name">{order.food_name}</div>
                       <div className="or-rest">{order.restaurant}</div>
                       {order.user_email && <div className="or-email">👤 {order.user_email}</div>}
@@ -383,6 +426,16 @@ export default function Dashboard() {
                         <option key={st} value={st}>{STATUS_CONFIG[st].label}</option>
                       ))}
                     </select>
+                    {order.status === "delivered" && (
+                      <button
+                        className="or-delete-btn"
+                        disabled={updating === order.id}
+                        onClick={() => deleteOrder(order.id)}
+                        title="Remove this order"
+                      >
+                        {updating === order.id ? "…" : "✕"}
+                      </button>
+                    )}
                   </div>
                 );
               })}
